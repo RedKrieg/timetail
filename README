@@ -1,0 +1,25 @@
+ttail - The time based tail
+
+Implements a heuristic approach to time based log tailing.
+
+Ultimate goal is to determine the time format of a log through pure regex matching, then apply that learned information to the file in reverse chunks, ending at the specified duration or essentially emulating GNU tail otherwise.
+
+Notes to self:
+- read 4K blocks
+- split via regex \d
+-- remove \d*[a-zA-Z]+\d* first in an effort to eliminate 'junk' such as user names or domain names in logs
+-- need to manually match AM/PM and month names (english and abbv for now)
+- assume the resulting set format is static from one line to the next
+-- exception: length of set could differ
+--- parse full 4K block
+--- ensure we have 10 lines+
+---- if not, get more, up to 16K
+-- find the minimum of the length of each set member
+-- measure delta in each position over the set (assume the set is chronological)
+--- simple rules for each position
+---- if a position exceeds 60, it can't be an hour, minute, second, month, or day
+---- same with 24 for excluding hours, 31 for days, 12 for months, etc.
+---- if two positions can't be determined, use a bias for left-most slots being most significant
+---- test our bias across the initial data set to ensure time never flows backward
+---- if time does flow backward, try to find a better fit based on deltas
+---- if no better fit exists, assume the log is out of order and try our best
