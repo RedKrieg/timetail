@@ -39,9 +39,13 @@ def parse_data(data):
 
     value_regex = re.compile("|".join(["\d+"] + month_map.keys())) 
 
+    lines = []
+
     # We remove the first line because it may not be complete.
     for line in data.splitlines()[1:]:
         values = value_regex.findall(line)
+
+        lines.append(values)
         
         if len(values) < shortest:
             shortest = len(values)
@@ -51,7 +55,7 @@ def parse_data(data):
             # Convert month names to values
             if re.match('[a-zA-Z]+', values[position]):
                 values[position] = month_map[values[position]]
-            value = values[position]
+            value = int(values[position])
 
             # Cascade down our exclusion list.  Add exclusions to the next match
             if value > 3000:
@@ -73,14 +77,24 @@ def parse_data(data):
                 for unit in positions[position]:
                     if not re.match('year|day|hour|minute|second', unit):
                         positions[position][unit] = False
+            elif value == 0:
+                for unit in positions[position]:
+                    if not re.match('year|hour|minute|second', unit):
+                        positions[position][unit] = False
 
-        print values
+    
+    # Let's try to output this in a meaningful way
 
-    print shortest
-    print positions
+    template = "%10s" * shortest
 
+    for unit in [ 'year', 'month', 'day', 'hour', 'minute', 'second' ]:
+        units = []
+        for position in positions:
+            units.append(unit if position[unit] else '')
+        print template % tuple(units)
 
-
+    for line in lines:
+        print template % tuple(line[:shortest])
 
 
 parse_data(data)
