@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import re
+import re, math
 with open("log.log") as f:
     data=f.read()
 
@@ -17,10 +17,13 @@ def parse_data(data):
         'second': True
     }
 
+    sums = []
+
     positions = []
 
     for i in xrange(shortest):
         positions.append(position_map.copy())
+        sums.append(0)
 
     month_map = {
         'Jan': 1,
@@ -45,17 +48,17 @@ def parse_data(data):
     for line in data.splitlines()[1:]:
         values = value_regex.findall(line)
 
-        lines.append(values)
-        
         if len(values) < shortest:
             shortest = len(values)
             positions = positions[:shortest]
+            sums = sums[:shortest]
 
         for position in xrange(len(positions)):
             # Convert month names to values
             if re.match('[a-zA-Z]+', values[position]):
                 values[position] = month_map[values[position]]
             value = int(values[position])
+            values[position] = value
 
             # Cascade down our exclusion list.  Add exclusions to the next match
             if value > 3000:
@@ -82,10 +85,28 @@ def parse_data(data):
                     if not re.match('year|hour|minute|second', unit):
                         positions[position][unit] = False
 
-    
+            sums[position] += value
+
+        lines.append(values)
+
+    averages = [ i / float(len(lines)) for i in sums ]
+
+    meansums = []
+
+    for i in xrange(shortest):
+        meansums.append(0)
+
+    # Calculate standard deviations
+    for line in lines:
+        for i in xrange(shortest):
+            meansums[i] += (line[i] - averages[i]) ** 2
+        
+    deviations = [ math.sqrt(i / float(len(lines) - 1)) for i in meansums ]
+
     # Let's try to output this in a meaningful way
 
     template = "%10s" * shortest
+    ftemplate = "%10.5f" * shortest
 
     for unit in [ 'year', 'month', 'day', 'hour', 'minute', 'second' ]:
         units = []
@@ -95,6 +116,8 @@ def parse_data(data):
 
     for line in lines:
         print template % tuple(line[:shortest])
+
+    print ftemplate % tuple(deviations)
 
 
 parse_data(data)
