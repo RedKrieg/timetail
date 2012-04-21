@@ -17,8 +17,6 @@ def cross_logic_pass(positions, unit_names, position_map):
             if position[unit]:
                 unit_counts[unit] += 1
     
-    print unit_counts
-
     for position in xrange(len(positions)):
         for unit in positions[position]:
             if positions[position][unit] and unit_counts[unit] == 1:
