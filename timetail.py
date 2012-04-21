@@ -1,7 +1,32 @@
 #!/usr/bin/env python
 import re, math
-with open("log.log") as f:
-    data=f.read()
+from optparse import OptionParser
+
+def _parse_args():
+    """Parses arguments and displays usage"""
+    usage = """%prog [options] file1 [... fileN]"""
+    parser = OptionParser(usage = usage)
+    options, args = parser.parse_args()
+    return options, args
+
+def cross_logic_pass(positions, unit_names, position_map):
+    unit_counts = { name: 0 for name in unit_names }
+
+    for position in positions:
+        for unit in position:
+            if position[unit]:
+                unit_counts[unit] += 1
+    
+    print unit_counts
+
+    for position in xrange(len(positions)):
+        for unit in positions[position]:
+            if positions[position][unit] and unit_counts[unit] == 1:
+                position_map[unit] = position
+                # We should make all other units in this position false
+                for unitchanger in positions[position]:
+                    if unitchanger != unit:
+                        positions[position][unitchanger] = False
 
 def parse_data(data):
     """Parses all data in the chunk, returning, you know, stuff."""
@@ -39,6 +64,8 @@ def parse_data(data):
         'Nov': 11,
         'Dec': 12
     }
+
+    unit_names = [ 'year', 'month', 'day', 'hour', 'minute', 'second' ]
 
     value_regex = re.compile("|".join(["\d+"] + month_map.keys())) 
 
@@ -103,21 +130,42 @@ def parse_data(data):
         
     deviations = [ math.sqrt(i / float(len(lines) - 1)) for i in meansums ]
 
-    # Let's try to output this in a meaningful way
+    # Deviation based exclusions
+    for deviation in xrange(len(deviations)):
+        if deviations[deviation] > 30:
+            for unit in positions[deviation]:
+                positions[deviation][unit] = False
 
+    position_map = { name: -1 for name in unit_names }
+
+    # Cross logic passes
+    for i in xrange(len(unit_names)):
+        cross_logic_pass(positions, unit_names, position_map)
+
+    print position_map
+
+    # Let's try to output this in a meaningful way
     template = "%10s" * shortest
     ftemplate = "%10.5f" * shortest
 
-    for unit in [ 'year', 'month', 'day', 'hour', 'minute', 'second' ]:
+    print ftemplate % tuple(deviations)
+    for unit in unit_names:
         units = []
         for position in positions:
             units.append(unit if position[unit] else '')
         print template % tuple(units)
 
-    for line in lines:
-        print template % tuple(line[:shortest])
-
-    print ftemplate % tuple(deviations)
+    #for line in lines:
+    #    print template % tuple(line[:shortest])
 
 
-parse_data(data)
+
+if __name__ == "__main__":
+    options, args = _parse_args()
+    for arg in args:
+        #try:
+            with open(arg) as f:
+                data=f.read()
+                parse_data(data)
+        #except Exception, e:
+        #    raise e
