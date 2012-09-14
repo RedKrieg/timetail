@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import re, math
+import re, math, datetime
 from optparse import OptionParser
 
 def _parse_args():
@@ -32,7 +32,6 @@ def cross_logic_pass(positions, unit_names, position_map):
                 for unitchanger in positions[position]:
                     if unitchanger != unit:
                         positions[position][unitchanger] = False
-    print_units(unit_names, positions)
     return unit_counts
 
 def get_minimum_possible_deviation_index(unit,
@@ -54,13 +53,8 @@ def get_minimum_possible_deviation_index(unit,
                 deviations[position] * (position + 1) < min_dev):
                 min_dev = deviations[position] * (position + 1)
                 min_index = position
-            print deviations[position], min_index, min_dev
         return min_index
     return position_map[unit]
-
-def cross_confirm_unit(unit, index, positions):
-    """ensures that all other columns mark possible"""
-    pass
 
 month_map = {
     'Jan': 1,
@@ -181,7 +175,6 @@ def parse_data(data):
                                                          position_map,
                                                          deviations,
                                                          positions)
-        print unit, new_index, position_map[unit]
         if position_map[unit] != new_index:
             position_map[unit] = new_index
             for position in xrange(len(positions)):
@@ -219,75 +212,111 @@ def parse_data(data):
                                                    unit_names,
                                                    position_map)
                     break
-        print_units(unit_names, positions)
-    
-
-    #unit_counts = cross_logic_pass(positions, unit_names, position_map)  
-    print position_map
-
-    # Let's try to output this in a meaningful way
-    ftemplate = "%10.5f" * shortest
-
-    print ftemplate % tuple(deviations)
-    print_units(unit_names, positions)
     return position_map
 
-def print_units(unit_names, positions):
-    template = "%10s" * len(positions)
-    for unit in unit_names:
-        units = []
-        for position in positions:
-            units.append(unit if position[unit] else '')
-        print template % tuple(units)
+def dict_to_time(time_match):
+    """Converts a dict [time_match] to a datetime."""
+    if time_match['month'] in month_map:
+        time_match['month'] = month_map[time_match['month']]
+    print time_match
+    return datetime.datetime(
+        int(time_match['year']),
+        int(time_match['month']),
+        int(time_match['day']),
+        int(time_match['hour']),
+        int(time_match['minute']),
+        int(time_match['second'])
+    )
+
+def rewind_to(f, target_time, pattern):
+    """Rewinds file descriptor [f] until the beginning of the file or
+    [target_time] is reached.  Time is parsed based on [pattern].
+
+    File descriptor [f] will be wound to the first byte of the first line
+    matching [pattern] and earlier than [target_time].
+    """
+    f.seek(-16384, 2)
+    earliest = datetime.datetime.now()
+    leftovers = ""
+    while target_time <= earliest and f.tell() > 0:
+        chunk = f.read(16384) + leftovers
+        leftover_offset = len(leftovers)
+        # Keep byte counts consistent by keeping newline chars
+        lines = chunk.splitlines(True)
+        leftovers = lines.pop(0)
+        if len(lines) > 0:
+            time_match = pattern.search(lines[0])
+            print lines[0], time_match.groupdict()
+            # We need to go deeper
+            if time_match and dict_to_time(time_match.groupdict()) >= target_time:
+                f.seek(-32768, 1)
+                continue
+            chunk_offset = -16384
+            for line in lines:
+                time_match = pattern.search(line)
+                if time_match and dict_to_time(time_match.groupdict()) >= target_time:
+                    f.seek(chunk_offset, 1)
+                    return
+                chunk_offset += len(line)
+
 
 if __name__ == "__main__":
     options, args = _parse_args()
     for arg in args:
-        #try
-            with open(arg) as f:
-                # Seek to EOF
-                f.seek(0, 2)
-                if f.tell() >= 4096:
-                    f.seek(-4096, 2)
+        with open(arg) as f:
+            # Seek to EOF and read the last 4K
+            f.seek(0, 2)
+            if f.tell() >= 16384:
+                f.seek(-16384, 2)
+            else:
+                f.seek(0, 0)
+            data = f.read(16384)
+            
+            # Guess at position of date elements
+            position_map = parse_data(data)
+
+            # Figure out how long our regex needs to be from the map
+            regex_len = position_map[max(position_map,
+                                         key=position_map.get)] + 1
+
+            regex_parts = [ False for i in xrange(regex_len) ]
+
+            # Month can be abbreviated
+            regex_parts[position_map['month']] = (
+                "(?P<month>%s)" % "|".join(["\d+"] + month_map.keys())
+            )
+
+            # These should be digits
+            for unit in ['year', 'day', 'hour', 'minute', 'second']:
+                regex_parts[position_map[unit]] = "(?P<%s>\d+)" % unit
+
+            final_regex = ""
+            # Don't want to prepend a negative match
+            first = True
+            for item in regex_parts:
+                # The parts that aren't yet filled in are just digit matches
+                # with no group
+                if not item:
+                    item = "\d+"
+                if 'month' in item:
+                    final_regex = "%s%s%s" % (
+                        final_regex,
+                        # This is a non-greedy matchall in front of a positive
+                        # lookahead assertion.  It's expensive, so we
+                        # special-case it.
+                        ".+?%s" % item.replace('P<month>', '='),
+                        item)
+                elif first:
+                    first = False
+                    final_regex = "%s%s" % (
+                                                    final_regex,
+                                                    item)
                 else:
-                    f.seek(0, 0)
-                data = f.read(4096)
-                
-                position_map = parse_data(data)
-                regex_len = position_map[max(position_map,
-                                             key=position_map.get)] + 1
-                regex_parts = [ False for i in xrange(regex_len) ]
-                regex_parts[position_map['month']] = (
-                    "(?P<month>%s)" % "|".join(["\d+"] + month_map.keys())
-                )
-                for unit in ['year', 'day', 'hour', 'minute', 'second']:
-                    regex_parts[position_map[unit]] = "(?P<%s>\d+)" % unit
-                final_regex = ""
-                first = True
-                for item in regex_parts:
-                    if not item:
-                        item = "\d+"
-                    if 'month' in item:
-                        final_regex = "%s%s%s" % (
-                            final_regex,
-                            ".+?%s" % item.replace('P<month>', '='),
-                            item)
-                    elif first:
-                        first = False
-                        final_regex = "%s%s" % (
-                                                        final_regex,
-                                                        item)
-                    else:
-                        final_regex = "%s%s%s" % (
-                            final_regex,
-                            "[^\d]+",
-                            item)
-                print final_regex
-                searcher = re.compile(final_regex)
-                for line in data.splitlines()[1:]:
-                    print line
-                    entries = searcher.search(line)
-                    if entries:
-                        print entries.groupdict()
-        #except Exception, e:
-        #    raise e
+                    final_regex = "%s%s%s" % (
+                        final_regex,
+                        "[^\d]+",
+                        item)
+            pattern = re.compile(final_regex)
+            
+            rewind_to(f, datetime.datetime(2012, 4, 9, 23, 42, 35), pattern)
+            print f.read()
