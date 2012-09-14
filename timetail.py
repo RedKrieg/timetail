@@ -204,7 +204,13 @@ if __name__ == "__main__":
     for arg in args:
         #try:
             with open(arg) as f:
-                data=f.read()
+                # Seek to EOF
+                f.seek(0, 2)
+                if f.tell() >= 4096:
+                    f.seek(-4096, 2)
+                else:
+                    f.seek(0, 0)
+                data = f.read(4096)
                 print parse_data(data)
         #except Exception, e:
         #    raise e
