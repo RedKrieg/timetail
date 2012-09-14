@@ -218,7 +218,6 @@ def dict_to_time(time_match):
     """Converts a dict [time_match] to a datetime."""
     if time_match['month'] in month_map:
         time_match['month'] = month_map[time_match['month']]
-    print time_match
     return datetime.datetime(
         int(time_match['year']),
         int(time_match['month']),
@@ -240,22 +239,24 @@ def rewind_to(f, target_time, pattern):
     leftovers = ""
     while target_time <= earliest and f.tell() > 0:
         chunk = f.read(16384) + leftovers
-        leftover_offset = len(leftovers)
         # Keep byte counts consistent by keeping newline chars
         lines = chunk.splitlines(True)
         leftovers = lines.pop(0)
+        leftover_offset = len(leftovers)
         if len(lines) > 0:
             time_match = pattern.search(lines[0])
-            print lines[0], time_match.groupdict()
             # We need to go deeper
             if time_match and dict_to_time(time_match.groupdict()) >= target_time:
-                f.seek(-32768, 1)
+                if f.tell() >= 32768:
+                    f.seek(-32768, 1)
+                else:
+                    f.seek(0, 0)
                 continue
             chunk_offset = -16384
             for line in lines:
                 time_match = pattern.search(line)
                 if time_match and dict_to_time(time_match.groupdict()) >= target_time:
-                    f.seek(chunk_offset, 1)
+                    f.seek(chunk_offset + leftover_offset, 1)
                     return
                 chunk_offset += len(line)
 
@@ -318,5 +319,5 @@ if __name__ == "__main__":
                         item)
             pattern = re.compile(final_regex)
             
-            rewind_to(f, datetime.datetime(2012, 4, 9, 23, 42, 35), pattern)
+            rewind_to(f, datetime.datetime(2012, 4, 20, 22, 0, 0), pattern)
             print f.read()
