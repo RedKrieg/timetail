@@ -275,6 +275,7 @@ if __name__ == "__main__":
             
             # Guess at position of date elements
             position_map = parse_data(data)
+            print position_map
 
             # Figure out how long our regex needs to be from the map
             regex_len = position_map[max(position_map,
@@ -318,6 +319,6 @@ if __name__ == "__main__":
                         "[^\d]+",
                         item)
             pattern = re.compile(final_regex)
-            
+            print final_regex
             rewind_to(f, datetime.datetime(2012, 4, 20, 22, 0, 0), pattern)
             print f.read()
